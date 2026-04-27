@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAI - Prueba de API</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f4f4f4; color: #333; }
+    header { background: #1a3c5e; color: white; padding: 14px 24px; font-size: 1.2rem; font-weight: bold; }
+    .container { max-width: 960px; margin: 24px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 20px; }
+    .card { background: white; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .card-header { background: #1a3c5e; color: white; padding: 10px 16px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .card-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .card-body.hidden { display: none; }
+    label { font-size: 0.85rem; color: #555; margin-bottom: 2px; display: block; }
+    input[type="text"], input[type="email"], input[type="password"], input[type="number"], select {
+      width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9rem;
+    }
+    input[type="file"] { padding: 6px 0; font-size: 0.9rem; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 160px; }
+    button { padding: 9px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; background: #1a3c5e; color: white; transition: background 0.2s; }
+    button:hover { background: #2a5a8e; }
+    button.danger { background: #c0392b; }
+    button.danger:hover { background: #e74c3c; }
+    button.success { background: #27ae60; }
+    button.success:hover { background: #2ecc71; }
+    button.warning { background: #e67e22; }
+    button.warning:hover { background: #f39c12; }
+    .response { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px; font-size: 0.82rem; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; margin-top: 6px; }
+    .response.ok { border-left: 4px solid #27ae60; }
+    .response.err { border-left: 4px solid #c0392b; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 8px; }
+    th { background: #1a3c5e; color: white; padding: 8px; text-align: left; }
+    td { padding: 7px 8px; border-bottom: 1px solid #eee; }
+    tr:hover td { background: #f0f4f8; }
+    .badge { padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; display: inline-block; }
+    .badge.nuevo { background: #e2e3e5; color: #383d41; }
+    .badge.pendiente { background: #ffeaa7; color: #8a6d00; }
+    .badge.publicado { background: #d4edda; color: #155724; }
+    .badge.vigente { background: #cce5ff; color: #004085; }
+    .badge.vencido { background: #f8d7da; color: #721c24; }
+    .token-bar { background: #eaf4ff; border: 1px solid #9ecfff; border-radius: 4px; padding: 8px 12px; font-size: 0.8rem; word-break: break-all; }
+    .hint { font-size: 0.82rem; color: #888; }
+
+    /* Diff viewer styles */
+    .diff-container { border: 1px solid #ddd; border-radius: 4px; overflow: hidden; margin-top: 8px; }
+    .diff-header { background: #f1f3f5; padding: 8px 12px; font-size: 0.82rem; font-weight: bold; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; }
+    .diff-stats { font-size: 0.8rem; display: flex; gap: 12px; margin: 8px 0; }
+    .diff-stats span { padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+    .diff-stats .stat-added { background: #d4edda; color: #155724; }
+    .diff-stats .stat-removed { background: #f8d7da; color: #721c24; }
+    .diff-stats .stat-change { background: #fff3cd; color: #856404; }
+    .diff-tabs { display: flex; gap: 0; margin-top: 8px; }
+    .diff-tabs button { border-radius: 4px 4px 0 0; border: 1px solid #ddd; border-bottom: none; background: #f8f9fa; color: #555; font-size: 0.82rem; padding: 6px 16px; }
+    .diff-tabs button.active { background: white; color: #1a3c5e; font-weight: bold; }
+    .diff-inline { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.8rem; line-height: 1.6; padding: 12px; max-height: 500px; overflow-y: auto; background: white; white-space: pre-wrap; word-break: break-word; }
+    .diff-inline .added { background: #d4edda; color: #155724; padding: 1px 2px; border-radius: 2px; }
+    .diff-inline .removed { background: #f8d7da; color: #721c24; text-decoration: line-through; padding: 1px 2px; border-radius: 2px; }
+    .diff-side { display: grid; grid-template-columns: 1fr 1fr; gap: 0; max-height: 500px; overflow-y: auto; }
+    .diff-side .panel { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.78rem; line-height: 1.5; }
+    .diff-side .panel-header { background: #e9ecef; padding: 4px 10px; font-weight: bold; font-size: 0.78rem; text-align: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; }
+    .diff-side .line { padding: 1px 8px; min-height: 1.5em; border-bottom: 1px solid #f0f0f0; }
+    .diff-side .line.removed { background: #ffeef0; }
+    .diff-side .line.added { background: #e6ffec; }
+    .diff-side .left-panel { border-right: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+
+<header>SAI — Prueba de Endpoints</header>
+
+<div class="container">
+
+  <!-- LOGIN -->
+  <div class="card">
+    <div class="card-header" onclick="toggle('auth-body')">
+      Autenticación
+      <span id="authStatus" style="font-size:0.8rem;font-weight:normal;">Sin sesión</span>
+    </div>
+    <div class="card-body" id="auth-body">
+      <div class="row">
+        <div><label>Email</label><input type="email" id="email" value="admin@sai.com" /></div>
+        <div><label>Password</label><input type="password" id="password" value="123456" /></div>
+      </div>
+      <div class="row">
+        <button onclick="login()">POST /api/auth/login</button>
+        <button onclick="getProfile()">GET /api/auth/profile</button>
+      </div>
+      <div class="token-bar" id="tokenBar">Token: —</div>
+      <div class="response" id="authResult"></div>
+    </div>
+  </div>
+
+  <!-- LISTAR DOCUMENTOS -->
+  <div class="card">
+    <div class="card-header" onclick="toggle('docs-body')">Listar Documentos — GET /api/documents</div>
+    <div class="card-body" id="docs-body">
+      <div class="row">
+        <div><label>Buscar (título / código)</label><input type="text" id="search" placeholder="Ej: Manual" /></div>
+        <div><label>Categoría</label><input type="text" id="categoryFilter" placeholder="Ej: Política" /></div>
+      </div>
+      <button onclick="getDocuments()">Obtener Documentos</button>
+      <div id="docsTable"></div>
+      <div class="response" id="docsResult"></div>
+    </div>
+  </div>
+
+  <!-- CONSULTAR POR ID -->
+  <div class="card">
+    <div class="card-header" onclick="toggle('byid-body')">Consultar por ID — GET /api/documents/:id</div>
+    <div class="card-body" id="byid-body">
+      <div><label>ID del documento</label><input type="number" id="docId" placeholder="Ej: 1" /></div>
+      <button onclick="getDocumentById()">Consultar</button>
+      <div class="response" id="byIdResult"></div>
+    </div>
+  </div>
+
+  <!-- SUBIR DOCUMENTO -->
+  <div class="card">
+    <div class="card-header" onclick="toggle('upload-body')">Subir Documento — POST /api/documents/upload</div>
+    <div class="card-body" id="upload-body">
+      <p class="hint">Requiere token (iniciar sesión primero)</p>
+      <div><label>Archivo PDF</label><input type="file" id="uploadFile" accept=".pdf" /></div>
+      <div class="row">
+        <div><label>Título</label><input type="text" id="uploadTitle" placeholder="Ej: Manual de Uso" /></div>
+        <div><label>Categoría</label><input type="text" id="uploadCategory" placeholder="Ej: Manual" /></div>
+        <div><label>Código de Origen</label><input type="text" id="uploadCode" placeholder="Ej: MAN-TIC-001" /></div>
+      </div>
+      <div class="row">
+        <div><label>Vigencia — Años</label><input type="number" id="uploadYears" placeholder="Ej: 1" min="0" /></div>
+        <div><label>Vigencia — Meses</label><input type="number" id="uploadMonths" placeholder="Ej: 6" min="0" /></div>
+        <div><label>Versión</label><input type="text" id="uploadRev" placeholder="Ej: 1.0 o VER.01" /></div>
+        <div style="display:flex;align-items:flex-end"><p class="hint">Si no se indica vigencia, se extrae del PDF</p></div>
+      </div>
+      <button class="success" onclick="uploadDocument()">Subir Documento</button>
+      <div class="response" id="uploadResult"></div>
+    </div>
+  </div>
+
+  <!-- EDITAR DOCUMENTO -->
+  <div class="card">
+    <div class="card-header" onclick="toggle('edit-body')">Editar Documento — PUT /api/documents/:id</div>
+    <div class="card-body" id="edit-body">
+      <p class="hint">Requiere token — Solo los campos que llenes serán modificados</p>
+      <div><label>ID del documento</label><input type="number" id="editId" placeholder="Ej: 1" /></div>
+      <div class="row">
+        <div><label>Título</label><input type="text" id="editTitle" placeholder="Nuevo título" /></div>
+        <div><label>Categoría</label><input type="text" id="editCategory" placeholder="Ej: Procedimiento" /></div>
+      </div>
+      <div class="row">
+        <div><label>Código de Origen</label><input type="text" id="editCode" placeholder="Ej: PRO-001" /></div>
+        <div>
+          <label>Estado</label>
+          <select id="editStatus">
+            <option value="">— Sin cambio —</option>
+            <option value="nuevo">Nuevo</option>
+            <option value="Vigente">Vigente</option>
+            <option value="Vencido">Vencido</option>
+          </select>
+        </div>
+        <div><label>Fecha de Vencimiento exacta</label><input type="text" id="editDate" placeholder="YYYY-MM-DD" /></div>
+      </div>
+      <div class="row">
+        <div><label>Extender vigencia — Años adicionales</label><input type="number" id="editYears" placeholder="Ej: 1" min="0" /></div>
+        <div><label>Extender vigencia — Meses adicionales</label><input type="number" id="editMonths" placeholder="Ej: 6" min="0" /></div>
+        <div style="display:flex;align-items:flex-end"><p class="hint">Se suma a la fecha de vencimiento actual</p></div>
+      </div>
+      <button class="warning" onclick="editDocument()">Guardar Cambios</button>
+      <div class="response" id="editResult"></div>
+    </div>
+  </div>
+
+  <!-- NUEVA VERSIÓN -->
+  <div class="card">
+    <div class="card-header" onclick="toggle('version-body')">Nueva Versión — POST /api/documents/:id/version</div>
+    <div class="card-body" id="version-body">
+      <p class="hint">Requiere token — Sube un nuevo PDF como versión actualizada del documento</p>
+      <div><label>ID del documento</label><input type="number" id="versionId" placeholder="Ej: 1" /></div>
+      <div><label>Nuevo Archivo PDF</label><input type="file" id="versionFile" accept=".pdf" /></div>
+      <div class="row">
+        <div><label>Nueva vigencia — Años adicionales</label><input type="number" id="versionYears" placeholder="Ej: 1" min="0" /></div>
+        <div><label>Nueva vigencia — Meses adicionales</label><input type="number" id="versionMonths" placeholder="Ej: 6" min="0" /></div>
+        <div><label>Versión</label><input type="text" id="versionRev" placeholder="Ej: 1.1 o VER.02" /></div>
+        <div style="display:flex;align-items:flex-end"><p class="hint">Si no se indica, se extrae del PDF</p></div>
+      </div>
+      <button class="success" onclick="uploadVersion()">Subir Nueva Versión</button>
+      <div class="response" id="versionResult"></div>
+    </div>
+  </div>
+
+  <!-- ELIMINAR DOCUMENTO -->
+  <div class="card">
+    <div class="card-header" onclick="toggle('delete-body')">Eliminar Documento — DELETE /api/documents/:id</div>
+    <div class="card-body" id="delete-body">
+      <p class="hint">Requiere token — El documento se marcará como inactivo (no se borra físicamente)</p>
+      <div><label>ID del documento</label><input type="number" id="deleteId" placeholder="Ej: 1" /></div>
+      <button class="danger" onclick="deleteDocument()">Eliminar Documento</button>
+      <div class="response" id="deleteResult"></div>
+    </div>
+  </div>
+
+  <!-- COMPARAR VERSIONES -->
+  <div class="card">
+    <div class="card-header" onclick="toggle('compare-body')">Comparar Versiones — GET /api/documents/:id/compare</div>
+    <div class="card-body" id="compare-body">
+      <p class="hint">Requiere token (iniciar sesión primero). Compara el texto extraído de dos revisiones del mismo documento, mostrando cambios detallados estilo diff</p>
+      <div class="row">
+        <div><label>ID del documento</label><input type="number" id="compareDocId" placeholder="Ej: 1" /></div>
+        <div><label>Versión A (anterior)</label><input type="text" id="compareRevA" placeholder="Ej: 1.0" /></div>
+        <div><label>Versión B (nueva)</label><input type="text" id="compareRevB" placeholder="Ej: 1.1" /></div>
+      </div>
+      <div class="row">
+        <button onclick="loadVersionsForCompare()">Cargar versiones disponibles</button>
+        <button class="success" onclick="compareVersions()">Comparar</button>
+      </div>
+      <div id="compareVersionsList" class="hint" style="margin-top:4px;"></div>
+      <div id="compareOutput"></div>
+      <div class="response" id="compareResult" style="display:none;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let token = '';
+
+  function toggle(id) {
+    document.getElementById(id).classList.toggle('hidden');
+  }
+
+  function showRes(elId, data, ok) {
+    const el = document.getElementById(elId);
+    el.textContent = JSON.stringify(data, null, 2);
+    el.className = 'response ' + (ok ? 'ok' : 'err');
+  }
+
+  async function login() {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: document.getElementById('email').value, password: document.getElementById('password').value })
+      });
+      const data = await res.json();
+      showRes('authResult', data, res.ok);
+      if (data.token) {
+        token = data.token;
+        document.getElementById('authStatus').textContent = (data.user?.name || 'Autenticado');
+        document.getElementById('tokenBar').textContent = 'Token: ' + token.substring(0, 50) + '...';
+      }
+    } catch (e) { showRes('authResult', { error: e.message }, false); }
+  }
+
+  async function getProfile() {
+    if (!token) { alert('Inicia sesión primero'); return; }
+    try {
+      const res = await fetch('/api/auth/profile', { headers: { 'Authorization': 'Bearer ' + token } });
+      showRes('authResult', await res.json(), res.ok);
+    } catch (e) { showRes('authResult', { error: e.message }, false); }
+  }
+
+  async function getDocuments() {
+    const search = document.getElementById('search').value;
+    const category = document.getElementById('categoryFilter').value;
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (category) params.append('category', category);
+    const url = '/api/documents' + (params.toString() ? '?' + params : '');
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      showRes('docsResult', data, res.ok);
+      if (res.ok && Array.isArray(data)) renderTable(data);
+    } catch (e) { showRes('docsResult', { error: e.message }, false); }
+  }
+
+  function renderTable(docs) {
+    const el = document.getElementById('docsTable');
+    if (!docs.length) { el.innerHTML = '<p class="hint" style="margin-top:8px">Sin documentos.</p>'; return; }
+    let html = '<table><tr><th>ID</th><th>Código</th><th>Título</th><th>Categoría</th><th>Estado</th><th>Vencimiento</th><th>Subido por</th></tr>';
+    docs.forEach(d => {
+      const badge = `<span class="badge ${(d.status||'').toLowerCase()}">${d.status || '—'}</span>`;
+      html += `<tr><td>${d.id}</td><td>${d.origin_code||'—'}</td><td>${d.title}</td><td>${d.category||'—'}</td><td>${badge}</td><td>${d.expiration_date ? new Date(d.expiration_date).toLocaleDateString('es-MX') : '—'}</td><td>${d.uploaded_by||'—'}</td></tr>`;
+    });
+    el.innerHTML = html + '</table>';
+  }
+
+  async function getDocumentById() {
+    const id = document.getElementById('docId').value;
+    if (!id) { alert('Ingresa un ID'); return; }
+    try {
+      const res = await fetch('/api/documents/' + id);
+      showRes('byIdResult', await res.json(), res.ok);
+    } catch (e) { showRes('byIdResult', { error: e.message }, false); }
+  }
+
+  async function uploadDocument() {
+    if (!token) { alert('Inicia sesión primero'); return; }
+    const file = document.getElementById('uploadFile').files[0];
+    if (!file) { alert('Selecciona un archivo PDF'); return; }
+    const rev = document.getElementById('uploadRev').value;
+    if (!rev) { alert('La versión (rev) es obligatoria'); return; }
+    const fd = new FormData();
+    fd.append('pdffile', file);
+    fd.append('title', document.getElementById('uploadTitle').value);
+    fd.append('category', document.getElementById('uploadCategory').value);
+    fd.append('origin_code', document.getElementById('uploadCode').value);
+    fd.append('rev', document.getElementById('uploadRev').value);
+    fd.append('expiration_years', document.getElementById('uploadYears').value || '0');
+    fd.append('expiration_months', document.getElementById('uploadMonths').value || '0');
+    try {
+      const res = await fetch('/api/documents/upload', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+      showRes('uploadResult', await res.json(), res.ok);
+    } catch (e) { showRes('uploadResult', { error: e.message }, false); }
+  }
+
+  async function editDocument() {
+    if (!token) { alert('Inicia sesión primero'); return; }
+    const id = document.getElementById('editId').value;
+    if (!id) { alert('Ingresa el ID'); return; }
+    const body = {};
+    const title = document.getElementById('editTitle').value;
+    const category = document.getElementById('editCategory').value;
+    const origin_code = document.getElementById('editCode').value;
+    const status = document.getElementById('editStatus').value;
+    const expiration_date = document.getElementById('editDate').value;
+    const expiration_years = document.getElementById('editYears').value;
+    const expiration_months = document.getElementById('editMonths').value;
+    if (title) body.title = title;
+    if (category) body.category = category;
+    if (origin_code) body.origin_code = origin_code;
+    if (status) body.status = status;
+    if (expiration_date) body.expiration_date = expiration_date;
+    if (expiration_years) body.expiration_years = expiration_years;
+    if (expiration_months) body.expiration_months = expiration_months;
+    try {
+      const res = await fetch('/api/documents/' + id, { method: 'PUT', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      showRes('editResult', await res.json(), res.ok);
+    } catch (e) { showRes('editResult', { error: e.message }, false); }
+  }
+
+  async function uploadVersion() {
+    if (!token) { alert('Inicia sesión primero'); return; }
+    const id = document.getElementById('versionId').value;
+    if (!id) { alert('Ingresa el ID'); return; }
+    const file = document.getElementById('versionFile').files[0];
+    if (!file) { alert('Selecciona un archivo PDF'); return; }
+    const rev = document.getElementById('versionRev').value;
+    if (!rev) { alert('La versión (rev) es obligatoria'); return; }
+    const fd = new FormData();
+    fd.append('pdffile', file);
+    fd.append('rev', document.getElementById('versionRev').value);
+    fd.append('expiration_years', document.getElementById('versionYears').value || '0');
+    fd.append('expiration_months', document.getElementById('versionMonths').value || '0');
+    try {
+      const res = await fetch('/api/documents/' + id + '/version', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+      showRes('versionResult', await res.json(), res.ok);
+    } catch (e) { showRes('versionResult', { error: e.message }, false); }
+  }
+
+  async function deleteDocument() {
+    if (!token) { alert('Inicia sesión primero'); return; }
+    const id = document.getElementById('deleteId').value;
+    if (!id) { alert('Ingresa el ID'); return; }
+    if (!confirm('¿Eliminar el documento con ID ' + id + '?')) return;
+    try {
+      const res = await fetch('/api/documents/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+      showRes('deleteResult', await res.json(), res.ok);
+    } catch (e) { showRes('deleteResult', { error: e.message }, false); }
+  }
+
+  // --- Comparación de versiones ---
+
+  async function loadVersionsForCompare() {
+    if (!token) { alert('Inicia sesión primero'); return; }
+    const id = document.getElementById('compareDocId').value;
+    if (!id) { alert('Ingresa el ID del documento'); return; }
+    try {
+      const res = await fetch('/api/documents/' + id, { headers: { 'Authorization': 'Bearer ' + token } });
+      const data = await res.json();
+      const el = document.getElementById('compareVersionsList');
+      if (!res.ok || !data.versions || data.versions.length === 0) {
+        el.textContent = 'No se encontraron versiones para este documento.';
+        return;
+      }
+      el.innerHTML = '<strong>Versiones disponibles:</strong> ' +
+        data.versions.map(v => v.revision_label + ' (subida ' + new Date(v.uploaded_at).toLocaleDateString('es-MX') + ')').join(' | ');
+    } catch (e) {
+      document.getElementById('compareVersionsList').textContent = 'Error al cargar versiones.';
+    }
+  }
+
+  let currentDiffData = null;
+
+  async function compareVersions() {
+    if (!token) { alert('Inicia sesión primero'); return; }
+    const id = document.getElementById('compareDocId').value;
+    const revA = document.getElementById('compareRevA').value;
+    const revB = document.getElementById('compareRevB').value;
+    if (!revA || !revB) { alert('Completa ID y ambas versiones'); return; }
+    if (revA === revB) { alert('Las versiones deben ser distintas'); return; }
+    const output = document.getElementById('compareOutput');
+    output.innerHTML = '<p class="hint">Comparando...</p>';
+    try {
+      const res = await fetch('/api/documents/' + id + '/compare?revA=' + revA + '&revB=' + revB, { headers: { 'Authorization': 'Bearer ' + token } });
+      const data = await res.json();
+      if (!res.ok) {
+        output.innerHTML = '';
+        document.getElementById('compareResult').style.display = '';
+        showRes('compareResult', data, false);
+        return;
+      }
+      document.getElementById('compareResult').style.display = 'none';
+      currentDiffData = data;
+      renderDiff(data, 'inline');
+    } catch (e) {
+      output.innerHTML = '';
+      document.getElementById('compareResult').style.display = '';
+      showRes('compareResult', { error: e.message }, false);
+    }
+  }
+
+  function renderDiff(data, mode) {
+    const output = document.getElementById('compareOutput');
+    const stats = data.stats;
+    let html = '';
+
+    // Estadísticas
+    html += '<div class="diff-stats">';
+    html += '<span class="stat-added">+ ' + stats.addedChars + ' caracteres</span>';
+    html += '<span class="stat-removed">- ' + stats.removedChars + ' caracteres</span>';
+    html += '<span class="stat-change">' + stats.changePercent + '% cambio</span>';
+    html += '</div>';
+
+    // Tabs
+    html += '<div class="diff-tabs">';
+    html += '<button class="' + (mode === 'inline' ? 'active' : '') + '" onclick="renderDiff(currentDiffData, \'inline\')">Unificado</button>';
+    html += '<button class="' + (mode === 'side' ? 'active' : '') + '" onclick="renderDiff(currentDiffData, \'side\')">Lado a lado</button>';
+    html += '</div>';
+
+    // Diff container
+    html += '<div class="diff-container">';
+    html += '<div class="diff-header"><span>' + data.comparison.revA.label + '</span><span>vs</span><span>' + data.comparison.revB.label + '</span></div>';
+
+    if (mode === 'inline') {
+      html += '<div class="diff-inline">';
+      data.inline.forEach(block => {
+        const escaped = escapeHtml(block.value);
+        if (block.type === 'added') html += '<span class="added">' + escaped + '</span>';
+        else if (block.type === 'removed') html += '<span class="removed">' + escaped + '</span>';
+        else html += escaped;
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="diff-side">';
+      html += '<div class="panel left-panel"><div class="panel-header">' + data.comparison.revA.label + '</div>';
+      data.sideBySide.left.forEach(l => {
+        html += '<div class="line ' + l.type + '">' + (escapeHtml(l.line) || '&nbsp;') + '</div>';
+      });
+      html += '</div>';
+      html += '<div class="panel"><div class="panel-header">' + data.comparison.revB.label + '</div>';
+      data.sideBySide.right.forEach(l => {
+        html += '<div class="line ' + l.type + '">' + (escapeHtml(l.line) || '&nbsp;') + '</div>';
+      });
+      html += '</div>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+    output.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>

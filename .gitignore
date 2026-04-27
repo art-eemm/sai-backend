@@ -1,0 +1,12 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno
+.env
+
+# Archivos compilados de TS
+dist/
+
+# Logs y sistemas
+*.log
+.DS_Store
