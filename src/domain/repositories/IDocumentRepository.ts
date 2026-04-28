@@ -36,13 +36,47 @@ export interface CreateVersionData {
 
 export interface IDocumentRepository {
   findAll(filter: DocumentFilter): Promise<Document[]>;
-  findById(id: number): Promise<(Document & { versions: DocumentVersion[] }) | null>;
+  findById(
+    id: number,
+  ): Promise<(Document & { versions: DocumentVersion[] }) | null>;
   create(data: DocumentCreateData): Promise<Document>;
   update(id: number, data: DocumentUpdateData): Promise<Document | null>;
   softDelete(id: number): Promise<boolean>;
   syncExpiredStatus(): Promise<void>;
   getCurrentExpiration(id: number): Promise<string | null>;
   createVersion(data: CreateVersionData): Promise<DocumentVersion>;
-  findVersionsByRevisions(documentId: number, revisions: string[]): Promise<DocumentVersion[]>;
-  updateExpiration(id: number, date: string | null, status: string): Promise<void>;
+  findVersionsByRevisions(
+    documentId: number,
+    revisions: string[],
+  ): Promise<DocumentVersion[]>;
+  updateExpiration(
+    id: number,
+    date: string | null,
+    status: string,
+  ): Promise<void>;
+  updateStatus(id: number, status: string, isctive?: boolean): Promise<void>;
+  addReviewComment(data: {
+    document_id: number;
+    reviewer_id: number;
+    comments: string;
+    status_asigned: string;
+  }): Promise<void>;
+  createNotification(data: {
+    user_id: number;
+    document_id: number;
+    type: string;
+    message: string;
+  }): Promise<void>;
+  sendToReview(docId: number, responsableId: number): Promise<void>;
+  approveDocument(
+    docId: number,
+    adminId: number,
+    responsableId: number,
+  ): Promise<void>;
+  rejectDocument(
+    docId: number,
+    adminId: number,
+    responsableId: number,
+    comments: string,
+  ): Promise<void>;
 }

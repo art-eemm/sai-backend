@@ -37,7 +37,11 @@ export class UploadVersionUseCase {
         : pdfDate;
 
     const fileSize = Math.round(dto.fileSizeBytes / 1024);
-    const newFilePath = this.fileService.renameToCodeRev(dto.filePath, doc.origin_code, dto.rev);
+    const newFilePath = this.fileService.renameToCodeRev(
+      dto.filePath,
+      doc.origin_code,
+      dto.rev,
+    );
     const fileType = mapExtensionToFileType(dto.fileOriginalName);
 
     await this.documentRepo.createVersion({
@@ -50,7 +54,35 @@ export class UploadVersionUseCase {
       revision_date: finalDate,
     });
 
-    await this.documentRepo.updateExpiration(dto.documentId, finalDate, "Vigente");
+    console.log("=== INICIO DE RASTREO ===");
+    console.log("1. Estado del documento antes de procesar:", doc.status);
+
+    const targetStatus =
+      doc.status === "CON_OBSERVACIONES" ? "CON_OBSERVACIONES" : "VIGENTE";
+    console.log("2. Target Status decidido:", targetStatus);
+    await this.documentRepo.updateExpiration(
+      dto.documentId,
+      finalDate,
+      targetStatus,
+    );
+    console.log(
+      "3. Se actualizó la expiración. Revisando si se manda a SAI...",
+    );
+
+    if (doc.status === "CON_OBSERVACIONES") {
+      console.log("4. ¡Es una corrección! Enviando a sendToReview...");
+      await this.documentRepo.sendToReview(doc.id, doc.created_by_id!);
+      console.log("5. Mando a revisión exitoso. Debería estar EN_REVISION.");
+    } else {
+      console.log("4. NO es una corrección. Se ignoró el envío a revisión.");
+    }
+    console.log("=== FIN DE RASTREO ===");
+
+    // await this.documentRepo.updateExpiration(
+    //   dto.documentId,
+    //   finalDate,
+    //   "Vigente",
+    // );
 
     return {
       message: "Nueva versión del documento subida correctamente",

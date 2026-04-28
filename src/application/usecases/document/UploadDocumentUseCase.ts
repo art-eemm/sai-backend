@@ -22,7 +22,7 @@ export class UploadDocumentUseCase {
     private readonly fileService: IFileService,
   ) {}
 
-  async execute(dto: UploadDocumentDTO) {
+  async execute(dto: UploadDocumentDTO, isAdmin: boolean = false) {
     this.fileService.ensureUploadsDir();
 
     const pdfDate = await this.pdfService.extractDate(dto.filePath);
@@ -33,6 +33,7 @@ export class UploadDocumentUseCase {
         ? calculateExpiration(new Date(), years, months)
         : pdfDate;
 
+    const initialStatus = isAdmin ? "VIGENTE" : "NUEVO";
     const fileSize = Math.round(dto.fileSizeBytes / 1024);
     const code = dto.origin_code ?? "PENDIENTE";
     const fileType = mapExtensionToFileType(dto.fileOriginalName);
@@ -43,11 +44,15 @@ export class UploadDocumentUseCase {
       origin_code: code,
       expiration_date: finalDate,
       created_by_id: dto.createdBy,
-      status: "nuevo",
+      status: initialStatus,
       is_active: true,
     });
 
-    const newFilePath = this.fileService.renameToCodeRev(dto.filePath, code, dto.rev);
+    const newFilePath = this.fileService.renameToCodeRev(
+      dto.filePath,
+      code,
+      dto.rev,
+    );
 
     await this.documentRepo.createVersion({
       document_id: doc.id,
@@ -58,6 +63,12 @@ export class UploadDocumentUseCase {
       uploaded_by_id: dto.createdBy,
       revision_date: finalDate,
     });
+
+    await this.documentRepo.updateExpiration(
+      doc.id,
+      finalDate ? finalDate.toString() : null,
+      initialStatus,
+    );
 
     return {
       message: "Documento almacenado exitosamente",
