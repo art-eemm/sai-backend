@@ -12,6 +12,7 @@ import type { SendToReviewUseCase } from "@/application/usecases/document/SendTo
 import type { PublishSignedVersionUseCase } from "@/application/usecases/document/PublishSignedVersionUseCase.js";
 import type { RejectDocumentUseCase } from "@/application/usecases/document/RejectDocumentUseCase.js";
 import type { EditDocumentDTO } from "@/application/dtos/document/EditDocumentDTO.js";
+import pool from "@/config/db.js";
 
 export class DocumentController {
   constructor(
@@ -293,6 +294,75 @@ export class DocumentController {
       res.status(201).json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  };
+
+  getNotifications = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as any).user?.id;
+
+      if (!userId) {
+        res.status(401).json({ error: "Usuario no autenticado" });
+        return;
+      }
+
+      const result = await pool.query(
+        `SELECT 
+            n.*, 
+            d.category, 
+            d.origin_code,
+            d.title
+         FROM notifications n
+         LEFT JOIN documents d ON n.document_id = d.id
+         WHERE n.user_id = $1 
+         ORDER BY n.created_at DESC 
+         LIMIT 20`,
+        [userId],
+      );
+
+      res.status(200).json(result.rows);
+    } catch (error: any) {
+      res.status(500).json({
+        error: "Error al obtener notificaciones",
+        details: error.message,
+      });
+    }
+  };
+
+  clearNotifications = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = (req as any).user?.id;
+
+      await pool.query(`DELETE FROM notifications WHERE user_id = $1`, [
+        userId,
+      ]);
+
+      res
+        .status(200)
+        .json({ message: "Notificaciones limpiadas exitosamente" });
+    } catch (error: any) {
+      res.status(500).json({ error: "Error al limpiar las notificaciones" });
+    }
+  };
+
+  markNotificationAsRead = async (
+    req: Request,
+    res: Response,
+  ): Promise<void> => {
+    try {
+      const { id } = req.params;
+
+      await pool.query(
+        `UPDATE notifications SET is_read = true WHERE id = $1`,
+        [id],
+      );
+
+      res.status(200).json({ succes: true });
+    } catch (error: any) {
+      res.status(500).json({
+        error: "Error al actualizar notificación",
+        details: error.message,
+      });
     }
   };
 }

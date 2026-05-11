@@ -277,9 +277,9 @@ export class PostgresDocumentRepository implements IDocumentRepository {
       const notifyResult = await client.query(
         `
         INSERT INTO notifications (user_id, document_id, type, message)
-        SELECT associate_id, $1, 'NUEVA_REVISION', 'Un documento fue subido/corregido y requiere tu revisión.'
+        SELECT COALESCE(associate_id, id), $1, 'NUEVA_REVISION', 'Un documento fue subido/corregido y requiere tu revisión.'
         FROM users
-        WHERE role = 'ADMIN_SAI'
+        WHERE role::text ILIKE '%ADMIN%' AND is_active = true
         RETURNING id
         `,
         [docId],
@@ -375,11 +375,16 @@ export class PostgresDocumentRepository implements IDocumentRepository {
         [docId],
       );
 
-      await client.query(
+      const notifyResult = await client.query(
         `INSERT INTO notifications (user_id, document_id, type, message)
-         SELECT associate_id, $1, 'PUBLICADO', 'Se ha publicado la versión firmada de un documento.'
-         FROM users WHERE role = 'ADMIN_SAI' LIMIT 1`,
-        [docId],
+         SELECT associate_id, $1, 'PUBLICADO', 'Se ha publicado una nueva versión oficial de un documento. ¡Por favor revísalo!'
+         FROM users 
+         WHERE is_active = true 
+           AND associate_id IS NOT NULL 
+           AND associate_id != $2 
+           AND id != $2
+         RETURNING id`,
+        [docId, responsableId],
       );
 
       await client.query("COMMIT");

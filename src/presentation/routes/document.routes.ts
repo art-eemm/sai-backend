@@ -40,10 +40,17 @@ const controller = new DocumentController(
 const router: ExpressRouter = Router();
 
 router.get("/", (req, res) => controller.getAll(req, res));
-router.get("/:id", (req, res) => controller.getById(req, res));
+router.get("/notifications", validateToken, controller.getNotifications);
+router.put(
+  "/notifications/:id/read",
+  validateToken,
+  controller.markNotificationAsRead,
+);
+router.delete("/notifications", validateToken, controller.clearNotifications);
 router.post("/upload", validateToken, upload.single("pdffile"), (req, res) =>
   controller.upload(req, res),
 );
+router.get("/:id", (req, res) => controller.getById(req, res));
 router.put("/:id", validateToken, (req, res) => controller.edit(req, res));
 router.delete("/:id", validateToken, (req, res) => controller.delete(req, res));
 router.post(

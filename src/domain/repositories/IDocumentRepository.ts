@@ -55,6 +55,7 @@ export interface IDocumentRepository {
     status: string,
   ): Promise<void>;
   updateStatus(id: number, status: string, isctive?: boolean): Promise<void>;
+  publishSignedDocument(docId: number, responsableId: number): Promise<void>;
   addReviewComment(data: {
     document_id: number;
     reviewer_id: number;

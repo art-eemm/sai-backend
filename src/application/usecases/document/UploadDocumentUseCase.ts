@@ -26,12 +26,31 @@ export class UploadDocumentUseCase {
     this.fileService.ensureUploadsDir();
 
     const pdfDate = await this.pdfService.extractDate(dto.filePath);
-    const years = parseInt(dto.expiration_years ?? "0") || 0;
-    const months = parseInt(dto.expiration_months ?? "0") || 0;
-    const finalDate =
-      years > 0 || months > 0
-        ? calculateExpiration(new Date(), years, months)
-        : pdfDate;
+    const CATEGORIAS_CON_VIGENCIA = [
+      "procedimientos",
+      "instructivos",
+      "complementarios",
+    ];
+    const canExpire = CATEGORIAS_CON_VIGENCIA.includes(
+      (dto.category ?? "").toLowerCase(),
+    );
+    let expirationDate: Date | string | null = null;
+
+    if (canExpire) {
+      const years = parseInt(dto.expiration_years ?? "0") || 0;
+      const months = parseInt(dto.expiration_months ?? "0") || 0;
+
+      if (years > 0 || months > 0) {
+        expirationDate = calculateExpiration(new Date(), years, months);
+      } else {
+        expirationDate = pdfDate;
+      }
+    }
+
+    // const finalDate =
+    //   years > 0 || months > 0
+    //     ? calculateExpiration(new Date(), years, months)
+    //     : pdfDate;
 
     const initialStatus = isAdmin ? "VIGENTE" : "NUEVO";
     const fileSize = Math.round(dto.fileSizeBytes / 1024);
@@ -42,7 +61,7 @@ export class UploadDocumentUseCase {
       title: dto.title ?? dto.fileOriginalName,
       category: dto.category ?? "General",
       origin_code: code,
-      expiration_date: finalDate,
+      expiration_date: expirationDate,
       created_by_id: dto.createdBy,
       status: initialStatus,
       is_active: true,
@@ -54,6 +73,8 @@ export class UploadDocumentUseCase {
       dto.rev,
     );
 
+    const revisionDate = pdfDate ? pdfDate : new Date().toISOString();
+
     await this.documentRepo.createVersion({
       document_id: doc.id,
       revision_number: dto.rev,
@@ -61,12 +82,12 @@ export class UploadDocumentUseCase {
       file_type: fileType,
       size_kb: fileSize,
       uploaded_by_id: dto.createdBy,
-      revision_date: finalDate,
+      revision_date: revisionDate,
     });
 
     await this.documentRepo.updateExpiration(
       doc.id,
-      finalDate ? finalDate.toString() : null,
+      expirationDate ? expirationDate.toString() : null,
       initialStatus,
     );
 
@@ -74,7 +95,7 @@ export class UploadDocumentUseCase {
       message: "Documento almacenado exitosamente",
       document: doc,
       revision: dto.rev,
-      expirationDate: finalDate,
+      expirationDate: expirationDate,
     };
   }
 }

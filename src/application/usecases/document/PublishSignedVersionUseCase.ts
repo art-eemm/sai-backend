@@ -42,7 +42,10 @@ export class PublishSignedVersionUseCase {
     };
 
     await this.documentRepo.createVersion(versionData);
-    await this.documentRepo.updateStatus(data.documentId, "VIGENTE", true);
+    await this.documentRepo.publishSignedDocument(
+      data.documentId,
+      data.uploadedBy,
+    );
 
     return {
       success: true,
