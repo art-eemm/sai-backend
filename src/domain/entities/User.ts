@@ -9,4 +9,10 @@ export interface User {
   /** nombre legible del departamento (se obtiene mediante join) */
   department?: string | null;
   code?: string | null;
+  reset_code?: string | null;
+  reset_code_expires?: string | null;
+  las_code_sent?: string | null;
+  profile_pic_url?: string | null;
+  phone?: string | null;
+  extension?: string | null;
 }

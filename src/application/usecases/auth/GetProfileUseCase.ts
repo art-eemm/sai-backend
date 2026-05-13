@@ -1,22 +1,23 @@
-export interface TokenPayload {
-  id: number;
-  name: string;
-  role: string;
-  email: string;
-  department?: string | null;
-}
+import type { IUserRepository } from "@/domain/repositories/IUserRepository.js";
 
 export class GetProfileUseCase {
-  execute(user: TokenPayload) {
-    // devolvemos sólo los campos solicitados por el frontend
+  constructor(private readonly userRepo: IUserRepository) {}
+
+  async execute(userId: number) {
+    const user = await this.userRepo.findByAssociateId(userId);
+
+    if (!user) {
+      throw new Error("USER_NOT_FOUND");
+    }
+
     return {
-      message: "Perfil recuperado",
-      user: {
-        fullname: user.name,
-        role: user.role,
-        email: user.email,
-        department: user.department ?? null,
-      },
+      full_name: user.full_name,
+      email: user.email,
+      role: user.role,
+      department: user.department ?? "Sin asignar",
+      profile_pic_url: user.profile_pic_url ?? null,
+      phone: user.phone ?? "N/A",
+      extension: user.extension ?? "N/A",
     };
   }
 }

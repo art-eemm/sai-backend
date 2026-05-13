@@ -16,14 +16,24 @@ import { SendToReviewUseCase } from "@/application/usecases/document/SendToRevie
 import { ApproveDocumentUseCase } from "@/application/usecases/document/ApproveDocumentUseCase.js";
 import { RejectDocumentUseCase } from "@/application/usecases/document/RejectDocumentUseCase.js";
 import { PublishSignedVersionUseCase } from "@/application/usecases/document/PublishSignedVersionUseCase.js";
+import { PostgresUserRepository } from "@/infrastructure/database/PostgresUserRepository.js";
+import { MailerService } from "@/infrastructure/services/MailService.js";
 
 // ── Dependency wiring (Dependency Inversion) ──────────────────────────────────
 const documentRepo = new PostgresDocumentRepository();
 const pdfService = new PdfService();
 const fileService = new FileService();
+const userRepo = new PostgresUserRepository();
+const mailerService = new MailerService();
 
 const controller = new DocumentController(
-  new UploadDocumentUseCase(documentRepo, pdfService, fileService),
+  new UploadDocumentUseCase(
+    documentRepo,
+    pdfService,
+    fileService,
+    userRepo,
+    mailerService,
+  ),
   new GetDocumentsUseCase(documentRepo),
   new GetDocumentByIdUseCase(documentRepo),
   new EditDocumentUseCase(documentRepo),
@@ -33,7 +43,12 @@ const controller = new DocumentController(
   new SendToReviewUseCase(documentRepo),
   new ApproveDocumentUseCase(documentRepo),
   new RejectDocumentUseCase(documentRepo),
-  new PublishSignedVersionUseCase(documentRepo, fileService),
+  new PublishSignedVersionUseCase(
+    documentRepo,
+    fileService,
+    userRepo,
+    mailerService,
+  ),
 );
 
 // ── Routes ────────────────────────────────────────────────────────────────────

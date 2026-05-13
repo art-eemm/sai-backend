@@ -3,12 +3,16 @@ import type {
   CreateVersionData,
 } from "@/domain/repositories/IDocumentRepository.js";
 import type { IFileService } from "@/domain/services/IFileService.js";
+import type { IUserRepository } from "@/domain/repositories/IUserRepository.js";
+import type { IMailService } from "@/domain/services/IMailService.js";
 import path from "path";
 
 export class PublishSignedVersionUseCase {
   constructor(
     private readonly documentRepo: IDocumentRepository,
     private readonly fileService: IFileService,
+    private readonly userRepo: IUserRepository,
+    private readonly mailerService: IMailService,
   ) {}
 
   async execute(data: {
@@ -46,6 +50,23 @@ export class PublishSignedVersionUseCase {
       data.documentId,
       data.uploadedBy,
     );
+
+    try {
+      const usersEmails = await this.userRepo.findAllEmails();
+
+      if (usersEmails.length > 0) {
+        const docName = document.title;
+        const docCategory = document.category;
+
+        this.mailerService
+          .sendNewDocumentAvailable(usersEmails, docName, docCategory)
+          .catch((err) =>
+            console.error("Error enviando correos masivos:", err),
+          );
+      }
+    } catch (error) {
+      console.error("Error al obtener correos para notificar:", error);
+    }
 
     return {
       success: true,

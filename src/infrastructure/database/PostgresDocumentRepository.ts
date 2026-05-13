@@ -265,6 +265,26 @@ export class PostgresDocumentRepository implements IDocumentRepository {
     );
   }
 
+  async createMassiveNotification(
+    documentId: number,
+    message: string,
+    type: string,
+  ): Promise<void> {
+    const query = `
+      INSERT INTO notifications (user_id, document_id, message, type, is_read, created_at)
+      SELECT associate_id, $1, $2, $3, false, NOW()
+      FROM users
+      WHERE is_active = true AND associate_id IS NOT NULL;
+    `;
+
+    try {
+      await pool.query(query, [documentId, message, type]);
+    } catch (error) {
+      console.error("Error al insertar notificaciones masivas:", error);
+      throw new Error("No se pudieron crear las notificaciones masivas");
+    }
+  }
+
   async sendToReview(docId: number, responsableId: number): Promise<void> {
     const client = await pool.connect();
     try {

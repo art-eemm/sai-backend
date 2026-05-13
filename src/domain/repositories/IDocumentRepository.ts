@@ -80,4 +80,9 @@ export interface IDocumentRepository {
     responsableId: number,
     comments: string,
   ): Promise<void>;
+  createMassiveNotification?(
+    document_id: number,
+    message: string,
+    type: string,
+  ): Promise<void>;
 }

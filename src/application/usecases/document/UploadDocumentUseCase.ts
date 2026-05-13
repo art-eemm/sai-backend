@@ -1,6 +1,8 @@
 import type { IDocumentRepository } from "@/domain/repositories/IDocumentRepository.js";
 import type { IPDFService } from "@/domain/services/IPDFService.js";
 import type { IFileService } from "@/domain/services/IFileService.js";
+import type { IUserRepository } from "@/domain/repositories/IUserRepository.js";
+import type { IMailService } from "@/domain/services/IMailService.js";
 import { calculateExpiration } from "@/domain/utils/dateUtils.js";
 import type { UploadDocumentDTO } from "@/application/dtos/document/UploadDocumentDTO.js";
 
@@ -20,6 +22,8 @@ export class UploadDocumentUseCase {
     private readonly documentRepo: IDocumentRepository,
     private readonly pdfService: IPDFService,
     private readonly fileService: IFileService,
+    private readonly userRepo: IUserRepository,
+    private readonly mailerService: IMailService,
   ) {}
 
   async execute(dto: UploadDocumentDTO, isAdmin: boolean = false) {
@@ -90,6 +94,37 @@ export class UploadDocumentUseCase {
       expirationDate ? expirationDate.toString() : null,
       initialStatus,
     );
+
+    if (initialStatus === "VIGENTE") {
+      try {
+        const usersEmails = await this.userRepo.findAllEmails();
+
+        if (usersEmails.length > 0) {
+          const docName = doc.title || "Nuevo Documento";
+          const docCategory = doc.category || "General";
+
+          this.mailerService
+            .sendNewDocumentAvailable(usersEmails, docName, docCategory)
+            .catch((err) =>
+              console.error("Error enviando correos masivos:", err),
+            );
+
+          if (this.documentRepo.createMassiveNotification) {
+            this.documentRepo
+              .createMassiveNotification(
+                doc.id,
+                `Nuevo documento publicado: ${docName}`,
+                "NUEVO_DOCUMENTO",
+              )
+              .catch((err) =>
+                console.error("Error guardando notificaciones en BD:", err),
+              );
+          }
+        }
+      } catch (error) {
+        console.error("Error al procesar notificaciones:", error);
+      }
+    }
 
     return {
       message: "Documento almacenado exitosamente",
