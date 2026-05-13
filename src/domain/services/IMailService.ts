@@ -5,4 +5,5 @@ export interface IMailService {
     documentName: string,
     category: string,
   ): Promise<void>;
+  sendMail(to: string, subject: string, html: string): Promise<void>;
 }

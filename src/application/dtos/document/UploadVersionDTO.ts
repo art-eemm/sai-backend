@@ -6,5 +6,5 @@ export interface UploadVersionDTO {
   filePath: string;
   fileOriginalName: string;
   fileSizeBytes: number;
-  uploadedBy: number | null;
+  uploadedBy: number;
 }

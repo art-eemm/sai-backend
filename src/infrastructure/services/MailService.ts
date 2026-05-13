@@ -44,7 +44,7 @@ export class MailerService implements IMailService {
   ): Promise<void> {
     const mailOptions = {
       from: '"Sistema SAI Propysol" <no-reply@propysol.com>',
-      to: "no-reply@propysol.com",
+      to,
       bcc: to,
       subject: `Nuevo documento disponible: ${documentName}`,
       html: `
@@ -60,6 +60,17 @@ export class MailerService implements IMailService {
         <p style="font-size: 12px; color: #999; text-align: center;">Este es un mensaje automático del Sistema de Administración Integral.</p>
       </div>
     `,
+    };
+
+    await this.transporter.sendMail(mailOptions);
+  }
+
+  async sendMail(to: string, subject: string, html: string): Promise<void> {
+    const mailOptions = {
+      from: '"Sistema SAI Propysol" <no-reply@propysol.com>',
+      to,
+      subject,
+      html,
     };
 
     await this.transporter.sendMail(mailOptions);

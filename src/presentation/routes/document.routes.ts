@@ -38,7 +38,7 @@ const controller = new DocumentController(
   new GetDocumentByIdUseCase(documentRepo),
   new EditDocumentUseCase(documentRepo),
   new DeleteDocumentUseCase(documentRepo),
-  new UploadVersionUseCase(documentRepo, pdfService, fileService),
+  new UploadVersionUseCase(documentRepo, userRepo, pdfService, fileService),
   new CompareVersionsUseCase(documentRepo, pdfService),
   new SendToReviewUseCase(documentRepo),
   new ApproveDocumentUseCase(documentRepo),

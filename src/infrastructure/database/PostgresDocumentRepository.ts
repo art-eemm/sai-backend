@@ -223,9 +223,9 @@ export class PostgresDocumentRepository implements IDocumentRepository {
 
     await pool.query(
       `UPDATE documents
-       SET expiration_date = COALESCE($1, expiration_date),
-           status = $2
-       WHERE id = $3`,
+        SET expiration_date = $1, 
+          estado = $2           
+        WHERE id = $3`,
       [date, finalStatus, id],
     );
   }

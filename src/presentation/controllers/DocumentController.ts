@@ -140,7 +140,11 @@ export class DocumentController {
         res.status(400).json({ error: "No se ha subido ningún archivo" });
         return;
       }
-      const uploadedBy = (req as CustomRequest).user?.id ?? null;
+      const uploadedBy = (req as CustomRequest).user?.id;
+      if (!uploadedBy) {
+        res.status(401).json({ error: "Usuario no autenticado." });
+        return;
+      }
       const rev = req.body.rev;
       if (!rev) {
         res.status(400).json({ error: "La versión es obligatoria." });
