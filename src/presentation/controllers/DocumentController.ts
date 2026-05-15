@@ -82,6 +82,19 @@ export class DocumentController {
       if (req.query["search"]) filter.search = String(req.query["search"]);
       if (req.query["category"])
         filter.category = String(req.query["category"]);
+
+      const user = (req as any).user;
+      const isAdmin = user?.role?.includes("ADMIN");
+      const isResponsable = user?.role?.includes("RESPONSABLE");
+
+      if (!isAdmin) {
+        filter.status = "VIGENTE";
+
+        if (isResponsable && user?.id) {
+          filter.uploaderId = Number(user.id);
+        }
+      }
+
       const docs = await this.getDocumentsUC.execute(filter);
       res.json(docs);
     } catch {

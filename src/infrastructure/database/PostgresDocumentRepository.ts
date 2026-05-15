@@ -32,6 +32,18 @@ export class PostgresDocumentRepository implements IDocumentRepository {
     if (filter.category) {
       sql += ` AND d.category = $${idx}`;
       params.push(filter.category);
+      idx++;
+    }
+
+    if (filter.status && filter.uploaderId) {
+      sql += ` AND (d.status = $${idx} OR d.created_by_id = $${idx + 1})`;
+      params.push(filter.status);
+      params.push(filter.uploaderId);
+      idx += 2;
+    } else if (filter.status) {
+      sql += ` AND d.status = $${idx}`;
+      params.push(filter.status);
+      idx++;
     }
 
     sql += ` ORDER BY d.created_at DESC`;
@@ -223,9 +235,10 @@ export class PostgresDocumentRepository implements IDocumentRepository {
 
     await pool.query(
       `UPDATE documents
-        SET expiration_date = $1, 
-          estado = $2           
-        WHERE id = $3`,
+       SET expiration_date = $1,
+           status = $2,
+           updated_at = NOW()
+       WHERE id = $3`,
       [date, finalStatus, id],
     );
   }

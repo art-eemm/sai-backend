@@ -4,6 +4,8 @@ import type { DocumentVersion } from "../entities/DocumentVersion.js";
 export interface DocumentFilter {
   search?: string;
   category?: string;
+  status?: string;
+  uploaderId?: number;
 }
 
 export interface DocumentCreateData {

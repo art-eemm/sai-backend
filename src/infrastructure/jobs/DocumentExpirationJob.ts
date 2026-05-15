@@ -56,7 +56,7 @@ export const startDocumentExpirationJob = () => {
             <h2 style="color: #d97706;">Aviso de Caducidad de Documento</h2>
             <p>Hola <strong>${doc.full_name}</strong>,</p>
             <p>Te recordamos que el documento que tienes a tu cargo caducará en exactamente <strong>${doc.time_left}</strong>.</p>
-            <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <div style="background-color: #f3f4f6; padding: .15px; border-radius: 8px; margin: 20px 0;">
               <p style="margin: 0;"><strong>Título:</strong> ${doc.title}</p>
               <p style="margin: 5px 0;"><strong>Código:</strong> ${doc.code}</p>
               <p style="margin: 0;"><strong>Fecha de Vencimiento:</strong> ${doc.expiration_date.toLocaleDateString()}</p>
