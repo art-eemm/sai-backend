@@ -345,7 +345,7 @@ export class PostgresDocumentRepository implements IDocumentRepository {
         [docId],
       );
       await client.query(
-        `INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'APROBADO', 'Tu documento ha sido aprovado. Por favor, procede a firmarlo.')`,
+        `INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'APROBADO', 'Tu documento ha sido aprobado. Por favor, procede a firmarlo.')`,
         [responsableId, docId],
       );
       await client.query("COMMIT");

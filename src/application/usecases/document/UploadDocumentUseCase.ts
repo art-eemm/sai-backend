@@ -56,7 +56,7 @@ export class UploadDocumentUseCase {
     //     ? calculateExpiration(new Date(), years, months)
     //     : pdfDate;
 
-    const initialStatus = isAdmin ? "VIGENTE" : "NUEVO";
+    const initialStatus = isAdmin ? "VIGENTE" : "EN_REVISION";
     const fileSize = Math.round(dto.fileSizeBytes / 1024);
     const code = dto.origin_code ?? "PENDIENTE";
     const fileType = mapExtensionToFileType(dto.fileOriginalName);
@@ -124,10 +124,20 @@ export class UploadDocumentUseCase {
       } catch (error) {
         console.error("Error al procesar notificaciones:", error);
       }
+    } else {
+      if (!isAdmin && dto.createdBy) {
+        try {
+          await this.documentRepo.sendToReview(doc.id, dto.createdBy);
+        } catch (error) {
+          console.error("Error al enviar automáticamente a revisión:", error);
+        }
+      }
     }
 
     return {
-      message: "Documento almacenado exitosamente",
+      message: isAdmin
+        ? "Documento almacenado exitosamente"
+        : "Documento enviado a revisión",
       document: doc,
       revision: dto.rev,
       expirationDate: expirationDate,
