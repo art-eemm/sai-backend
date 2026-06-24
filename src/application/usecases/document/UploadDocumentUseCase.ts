@@ -34,20 +34,22 @@ export class UploadDocumentUseCase {
       "procedimientos",
       "instructivos",
       "complementarios",
+      "manuales",
     ];
     const canExpire = CATEGORIAS_CON_VIGENCIA.includes(
       (dto.category ?? "").toLowerCase(),
     );
     let expirationDate: Date | string | null = null;
+    const baseDate = (dto.document_date && dto.document_date.trim() !== "") ? dto.document_date : (pdfDate || new Date().toISOString());
 
     if (canExpire) {
       const years = parseInt(dto.expiration_years ?? "0") || 0;
       const months = parseInt(dto.expiration_months ?? "0") || 0;
 
       if (years > 0 || months > 0) {
-        expirationDate = calculateExpiration(new Date(), years, months);
+        expirationDate = calculateExpiration(baseDate, years, months);
       } else {
-        expirationDate = pdfDate;
+        expirationDate = pdfDate || null;
       }
     }
 
@@ -77,7 +79,7 @@ export class UploadDocumentUseCase {
       dto.rev,
     );
 
-    const revisionDate = pdfDate ? pdfDate : new Date().toISOString();
+    const revisionDate = (dto.document_date && dto.document_date.trim() !== "") ? dto.document_date : (pdfDate ? pdfDate : new Date().toISOString());
 
     await this.documentRepo.createVersion({
       document_id: doc.id,
@@ -97,29 +99,18 @@ export class UploadDocumentUseCase {
 
     if (initialStatus === "VIGENTE") {
       try {
-        const usersEmails = await this.userRepo.findAllEmails();
+        const docName = doc.title || "Nuevo Documento";
 
-        if (usersEmails.length > 0) {
-          const docName = doc.title || "Nuevo Documento";
-          const docCategory = doc.category || "General";
-
-          this.mailerService
-            .sendNewDocumentAvailable(usersEmails, docName, docCategory)
+        if (this.documentRepo.createMassiveNotification) {
+          this.documentRepo
+            .createMassiveNotification(
+              doc.id,
+              `Nuevo documento publicado: ${docName}`,
+              "NUEVO_DOCUMENTO",
+            )
             .catch((err) =>
-              console.error("Error enviando correos masivos:", err),
+              console.error("Error guardando notificaciones en BD:", err),
             );
-
-          if (this.documentRepo.createMassiveNotification) {
-            this.documentRepo
-              .createMassiveNotification(
-                doc.id,
-                `Nuevo documento publicado: ${docName}`,
-                "NUEVO_DOCUMENTO",
-              )
-              .catch((err) =>
-                console.error("Error guardando notificaciones en BD:", err),
-              );
-          }
         }
       } catch (error) {
         console.error("Error al procesar notificaciones:", error);

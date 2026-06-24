@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import pool from "@/config/db.js";
 import type {
   IDocumentRepository,
@@ -8,8 +10,121 @@ import type {
 } from "@/domain/repositories/IDocumentRepository.js";
 import type { Document } from "@/domain/entities/Document.js";
 import type { DocumentVersion } from "@/domain/entities/DocumentVersion.js";
+import { MailerService } from "@/infrastructure/services/MailService.js";
 
 export class PostgresDocumentRepository implements IDocumentRepository {
+  private readonly mailService = new MailerService();
+
+  private getFriendlyTitle(type: string): string {
+    switch (type?.toUpperCase()) {
+      case "APROBADO":
+        return "Documento Aprobado";
+      case "RECHAZADO":
+        return "Documento con Observaciones (Rechazado)";
+      case "NUEVA_REVISION":
+        return "Nueva Revisión de Documento Requerida";
+      case "PUBLICADO":
+        return "Nuevo Documento Publicado Oficialmente";
+      case "NUEVO_DOCUMENTO":
+        return "Nuevo Documento Disponible";
+      default:
+        return "Notificación del Sistema (SAI)";
+    }
+  }
+
+  private async sendEmailForNotification(
+    userId: number,
+    title: string,
+    message: string,
+    type: string,
+    documentId?: number,
+  ): Promise<void> {
+    try {
+      const userRes = await pool.query(
+        "SELECT email, full_name FROM users WHERE associate_id = $1 OR id = $1",
+        [userId],
+      );
+      if (userRes.rows.length === 0) return;
+
+      const { email, full_name } = userRes.rows[0];
+      if (!email) return;
+
+      let docTitle = "";
+      let docCode = "";
+      let expDateStr: string | undefined = undefined;
+
+      if (documentId) {
+        const docRes = await pool.query(
+          "SELECT title, origin_code, expiration_date FROM documents WHERE id = $1",
+          [documentId],
+        );
+        if (docRes.rows.length > 0) {
+          docTitle = docRes.rows[0].title || "";
+          docCode = docRes.rows[0].origin_code || "";
+          if (docRes.rows[0].expiration_date) {
+            const rawDate = docRes.rows[0].expiration_date;
+            expDateStr =
+              rawDate instanceof Date
+                ? rawDate.toLocaleDateString("es-MX")
+                : String(rawDate).split("T")[0];
+          }
+        }
+      }
+
+      await this.mailService.sendSystemNotification({
+        to: email,
+        recipientName: full_name || "",
+        type: type,
+        subject: title,
+        message: message,
+        documentTitle: docTitle,
+        documentCode: docCode,
+        expirationDate: expDateStr,
+      });
+      console.log(
+        `Notificación por correo enviada a ${email} para el usuario ${userId}`,
+      );
+    } catch (error) {
+      console.error(
+        `Error al enviar correo de notificación al usuario ${userId}:`,
+        error,
+      );
+    }
+  }
+
+  private async deletePreviousCorrectionFiles(docId: number): Promise<void> {
+    try {
+      // Find all reviews for this document that have a correction_file_url
+      const res = await pool.query(
+        "SELECT id, correction_file_url FROM document_reviews WHERE document_id = $1 AND correction_file_url IS NOT NULL",
+        [docId],
+      );
+
+      for (const row of res.rows) {
+        const filePath = row.correction_file_url;
+        if (filePath) {
+          const absolutePath = path.resolve(filePath);
+          if (fs.existsSync(absolutePath)) {
+            fs.unlinkSync(absolutePath);
+            console.log(
+              `[Auto-Limpieza] Archivo de observaciones eliminado físicamente: ${absolutePath}`,
+            );
+          }
+        }
+        // Clear reference in database
+        await pool.query(
+          "UPDATE document_reviews SET correction_file_url = NULL WHERE id = $1",
+          [row.id],
+        );
+      }
+    } catch (error) {
+      console.error(
+        "[Auto-Limpieza] Error al eliminar archivos de observaciones previos:",
+        error,
+      );
+    }
+  }
+
   async findAll(filter: DocumentFilter): Promise<Document[]> {
     const params: unknown[] = [];
     let idx = 1;
@@ -70,11 +185,13 @@ export class PostgresDocumentRepository implements IDocumentRepository {
     );
 
     const reviewsResult = await pool.query(
-      `SELECT comments FROM document_reviews WHERE document_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT comments, correction_file_url FROM document_reviews WHERE document_id = $1 ORDER BY created_at DESC LIMIT 1`,
       [id],
     );
 
     const latest_review = reviewsResult.rows[0]?.comments || null;
+    const latest_correction_file =
+      reviewsResult.rows[0]?.correction_file_url || null;
 
     const versions: DocumentVersion[] = (
       versionsResult.rows as DocumentVersion[]
@@ -83,7 +200,12 @@ export class PostgresDocumentRepository implements IDocumentRepository {
       revision_label: v.revision_number,
     }));
 
-    return { ...(docResult.rows[0] as Document), versions, latest_review };
+    return {
+      ...(docResult.rows[0] as Document),
+      versions,
+      latest_review,
+      latest_correction_file,
+    };
   }
 
   async create(data: DocumentCreateData): Promise<Document> {
@@ -124,7 +246,18 @@ export class PostgresDocumentRepository implements IDocumentRepository {
         id,
       ],
     );
-    return (result.rows[0] as Document) ?? null;
+
+    await this.syncExpiredStatus();
+
+    if (result.rows.length === 0) return null;
+    const finalDoc = await pool.query(
+      `SELECT d.*, u.full_name AS uploaded_by
+       FROM documents d
+       LEFT JOIN users u ON d.created_by_id = u.associate_id
+       WHERE d.id = $1`,
+      [id],
+    );
+    return (finalDoc.rows[0] as Document) ?? null;
   }
 
   async softDelete(id: number): Promise<boolean> {
@@ -137,14 +270,38 @@ export class PostgresDocumentRepository implements IDocumentRepository {
   }
 
   async syncExpiredStatus(): Promise<void> {
+    // 1. Mark past-expiration documents as VENCIDO
     await pool.query(
       `
       UPDATE documents 
-      SET status = 'VENCIDO' 
+      SET status = 'VENCIDO',
+          updated_at = NOW()
       WHERE expiration_date < CURRENT_DATE 
-        AND status NOT IN ('NUEVO', 'EN_REVISION', 'CON_OBSERVACIONES', 'APROBADO_SIN_FIRMA')
-        AND updated_at < CURRENT_DATE
-    `,
+        AND status NOT IN ('NUEVO', 'EN_REVISION', 'CON_OBSERVACIONES', 'APROBADO_SAI', 'APROBADO_SIN_FIRMA', 'VENCIDO')
+      `,
+    );
+
+    // 2. Mark documents expiring in 1 month or less as POR_VENCER
+    await pool.query(
+      `
+      UPDATE documents 
+      SET status = 'POR_VENCER',
+          updated_at = NOW()
+      WHERE expiration_date >= CURRENT_DATE 
+        AND expiration_date <= CURRENT_DATE + INTERVAL '1 month'
+        AND status NOT IN ('NUEVO', 'EN_REVISION', 'CON_OBSERVACIONES', 'APROBADO_SAI', 'APROBADO_SIN_FIRMA', 'POR_VENCER', 'VENCIDO')
+      `,
+    );
+
+    // 3. Restore documents whose expiration is extended to > 1 month back to VIGENTE
+    await pool.query(
+      `
+      UPDATE documents 
+      SET status = 'VIGENTE',
+          updated_at = NOW()
+      WHERE expiration_date > CURRENT_DATE + INTERVAL '1 month'
+        AND status IN ('POR_VENCER', 'VENCIDO')
+      `,
     );
   }
 
@@ -160,6 +317,9 @@ export class PostgresDocumentRepository implements IDocumentRepository {
   }
 
   async createVersion(data: CreateVersionData): Promise<DocumentVersion> {
+    // Delete previous correction files since a new version is being uploaded
+    await this.deletePreviousCorrectionFiles(data.document_id);
+
     const checkResult = await pool.query(
       `SELECT id FROM document_versions WHERE document_id = $1 AND revision_number = $2`,
       [data.document_id, data.revision_number],
@@ -225,13 +385,32 @@ export class PostgresDocumentRepository implements IDocumentRepository {
     const protectedStatuses = [
       "EN_REVISION",
       "CON_OBSERVACIONES",
+      "APROBADO_SAI",
       "APROBADO_SIN_FIRMA",
     ];
 
-    const finalStatus =
-      date && new Date(date) < new Date() && !protectedStatuses.includes(status)
-        ? "VENCIDO"
-        : status;
+    let finalStatus = status;
+
+    if (date && !protectedStatuses.includes(status)) {
+      const expDate = new Date(date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      expDate.setHours(0, 0, 0, 0);
+
+      if (expDate < today) {
+        finalStatus = "VENCIDO";
+      } else {
+        const oneMonthFromNow = new Date();
+        oneMonthFromNow.setMonth(oneMonthFromNow.getMonth() + 1);
+        oneMonthFromNow.setHours(23, 59, 59, 999);
+
+        if (expDate <= oneMonthFromNow) {
+          finalStatus = "POR_VENCER";
+        } else if (status === "POR_VENCER" || status === "VENCIDO") {
+          finalStatus = "VIGENTE";
+        }
+      }
+    }
 
     await pool.query(
       `UPDATE documents
@@ -276,6 +455,17 @@ export class PostgresDocumentRepository implements IDocumentRepository {
       `INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, $3, $4)`,
       [data.user_id, data.document_id, data.type, data.message],
     );
+
+    // Send email asynchronously
+    this.sendEmailForNotification(
+      data.user_id,
+      this.getFriendlyTitle(data.type),
+      data.message,
+      data.type,
+      data.document_id,
+    ).catch((err) =>
+      console.error("Error al enviar email de notificación:", err),
+    );
   }
 
   async createMassiveNotification(
@@ -292,6 +482,28 @@ export class PostgresDocumentRepository implements IDocumentRepository {
 
     try {
       await pool.query(query, [documentId, message, type]);
+
+      // Send emails to all active users asynchronously
+      pool
+        .query(
+          "SELECT associate_id FROM users WHERE is_active = true AND associate_id IS NOT NULL",
+        )
+        .then((res) => {
+          for (const row of res.rows) {
+            this.sendEmailForNotification(
+              row.associate_id,
+              this.getFriendlyTitle(type),
+              message,
+              type,
+              documentId,
+            ).catch((err) =>
+              console.error("Error al enviar email masivo:", err),
+            );
+          }
+        })
+        .catch((err) =>
+          console.error("Error al obtener usuarios para email masivo:", err),
+        );
     } catch (error) {
       console.error("Error al insertar notificaciones masivas:", error);
       throw new Error("No se pudieron crear las notificaciones masivas");
@@ -324,6 +536,31 @@ export class PostgresDocumentRepository implements IDocumentRepository {
         );
       }
       await client.query("COMMIT");
+
+      // Send emails to all admins asynchronously
+      client
+        .query(
+          "SELECT COALESCE(associate_id, id) AS user_id FROM users WHERE role::text ILIKE '%ADMIN%' AND is_active = true",
+        )
+        .then((res) => {
+          for (const admin of res.rows) {
+            this.sendEmailForNotification(
+              admin.user_id,
+              "Nueva Revisión Requerida",
+              "Un documento fue subido/corregido y requiere tu revisión.",
+              "NUEVA_REVISION",
+              docId,
+            ).catch((err) =>
+              console.error(
+                "Error al notificar por email a administrador:",
+                err,
+              ),
+            );
+          }
+        })
+        .catch((err) =>
+          console.error("Error al obtener administradores para email:", err),
+        );
     } catch (e) {
       await client.query("ROLLBACK");
       throw e;
@@ -336,19 +573,132 @@ export class PostgresDocumentRepository implements IDocumentRepository {
     docId: number,
     adminId: number,
     responsableId: number,
+    userRole: string,
   ): Promise<void> {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      await client.query(
-        `UPDATE documents SET status = 'APROBADO_SIN_FIRMA' WHERE id = $1`,
-        [docId],
-      );
-      await client.query(
-        `INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'APROBADO', 'Tu documento ha sido aprobado. Por favor, procede a firmarlo.')`,
-        [responsableId, docId],
-      );
-      await client.query("COMMIT");
+
+      const isGerente = userRole.toUpperCase().includes("GERENTE");
+
+      if (isGerente) {
+        await client.query(
+          `UPDATE documents SET status = 'APROBADO_SIN_FIRMA' WHERE id = $1`,
+          [docId],
+        );
+        await client.query(
+          `
+          INSERT INTO notifications (user_id, document_id, type, message)
+          SELECT COALESCE(associate_id, id), $1, 'APROBADO', 'El gerente ha aprobado el documento. Por favor sube la versión final firmada.'
+          FROM users
+          WHERE role::text ILIKE '%ADMIN%' AND is_active = true
+          `,
+          [docId],
+        );
+        await client.query(
+          `INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'APROBADO', 'El gerente ha otorgado el Visto Bueno a tu documento. Un administrador subirá la versión final.')`,
+          [responsableId, docId],
+        );
+        await client.query("COMMIT");
+
+        // Delete previous correction files since it is approved by Gerente
+        await this.deletePreviousCorrectionFiles(docId);
+
+        // Send emails asynchronously
+        client
+          .query(
+            "SELECT COALESCE(associate_id, id) AS user_id FROM users WHERE role::text ILIKE '%ADMIN%' AND is_active = true",
+          )
+          .then((res) => {
+            for (const admin of res.rows) {
+              this.sendEmailForNotification(
+                admin.user_id,
+                "Visto Bueno de Gerencia",
+                "El gerente ha aprobado el documento (Visto Bueno). Por favor sube la versión final firmada.",
+                "APROBADO",
+                docId,
+              ).catch((err) =>
+                console.error(
+                  "Error al notificar por email a administrador de aprobación de Gerente:",
+                  err,
+                ),
+              );
+            }
+          })
+          .catch((err) =>
+            console.error("Error al obtener administradores para email:", err),
+          );
+
+        this.sendEmailForNotification(
+          responsableId,
+          "Visto Bueno de Gerencia",
+          "El gerente ha otorgado el Visto Bueno a tu documento. Un administrador subirá la versión final.",
+          "APROBADO",
+          docId,
+        ).catch((err) =>
+          console.error(
+            "Error al enviar email de aprobación a responsable:",
+            err,
+          ),
+        );
+      } else {
+        await client.query(
+          `UPDATE documents SET status = 'APROBADO_SAI' WHERE id = $1`,
+          [docId],
+        );
+        await client.query(
+          `
+          INSERT INTO notifications (user_id, document_id, type, message)
+          SELECT COALESCE(associate_id, id), $1, 'NUEVA_REVISION', 'Un documento fue aprobado por el administrador y requiere tu visto bueno.'
+          FROM users
+          WHERE role::text ILIKE '%GERENTE%' AND is_active = true
+          `,
+          [docId],
+        );
+        await client.query(
+          `INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'APROBADO', 'Tu documento fue aprobado por el administrador. Está pendiente de visto bueno de Gerencia.')`,
+          [responsableId, docId],
+        );
+        await client.query("COMMIT");
+
+        // Send emails asynchronously to GERENTEs
+        client
+          .query(
+            "SELECT COALESCE(associate_id, id) AS user_id FROM users WHERE role::text ILIKE '%GERENTE%' AND is_active = true",
+          )
+          .then((res) => {
+            for (const gerente of res.rows) {
+              this.sendEmailForNotification(
+                gerente.user_id,
+                "Revisión Requerida",
+                "Un documento fue aprobado por el administrador y requiere tu revisión.",
+                "NUEVA_REVISION",
+                docId,
+              ).catch((err) =>
+                console.error(
+                  "Error al notificar por email a gerente de aprobación de admin:",
+                  err,
+                ),
+              );
+            }
+          })
+          .catch((err) =>
+            console.error("Error al obtener gerentes para email:", err),
+          );
+
+        this.sendEmailForNotification(
+          responsableId,
+          "Documento Aprobado por Administrador",
+          "Tu documento fue aprobado por el administrador. Está pendiente de visto bueno de Gerencia.",
+          "APROBADO",
+          docId,
+        ).catch((err) =>
+          console.error(
+            "Error al enviar email de aprobación por admin a responsable:",
+            err,
+          ),
+        );
+      }
     } catch (e) {
       await client.query("ROLLBACK");
       throw e;
@@ -362,6 +712,7 @@ export class PostgresDocumentRepository implements IDocumentRepository {
     adminId: number,
     responsableId: number,
     comments: string,
+    correctionFilePath?: string,
   ): Promise<void> {
     const client = await pool.connect();
 
@@ -373,17 +724,53 @@ export class PostgresDocumentRepository implements IDocumentRepository {
         [docId],
       );
 
-      await client.query(
-        "INSERT INTO document_reviews (document_id, reviewer_id, comments, status_assigned) VALUES ($1, $2, $3, 'CON_OBSERVACIONES')",
-        [docId, adminId || null, comments],
-      );
+      const normalizedPath = correctionFilePath
+        ? correctionFilePath.replace(/\\/g, "/")
+        : null;
 
       await client.query(
-        "INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'RECHAZADO', 'Tu documento tiene observaciones.')",
-        [responsableId || null, docId],
+        "INSERT INTO document_reviews (document_id, reviewer_id, comments, status_assigned, correction_file_url) VALUES ($1, $2, $3, 'CON_OBSERVACIONES', $4)",
+        [docId, adminId || null, comments, normalizedPath],
+      );
+
+      // Check reviewer's role to customize notification message
+      const reviewerResult = await client.query(
+        "SELECT role FROM users WHERE id = $1",
+        [adminId],
+      );
+      const reviewerRole = reviewerResult.rows[0]?.role || "";
+      const isGerente = reviewerRole.toUpperCase().includes("GERENTE");
+
+      const notifMessage = isGerente
+        ? `Tu documento fue rechazado por gerencia con la siguiente explicación: "${comments}"`
+        : "Tu documento tiene observaciones.";
+
+      await client.query(
+        "INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'RECHAZADO', $3)",
+        [responsableId || null, docId, notifMessage],
       );
 
       await client.query("COMMIT");
+
+      // Send email asynchronously
+      if (responsableId) {
+        const emailSubject = isGerente
+          ? "Documento Rechazado por Gerencia"
+          : "Documento con Observaciones";
+        const emailBody = isGerente
+          ? `Tu documento fue rechazado por gerencia con la siguiente explicación:\n\n"${comments}"`
+          : `Tu documento tiene observaciones cargadas por el revisor:\n\n"${comments}"`;
+
+        this.sendEmailForNotification(
+          responsableId,
+          emailSubject,
+          emailBody,
+          "RECHAZADO",
+          docId,
+        ).catch((err) =>
+          console.error("Error al enviar email de observaciones/rechazo:", err),
+        );
+      }
     } catch (e: any) {
       await client.query("ROLLBACK");
       throw e;
@@ -421,6 +808,37 @@ export class PostgresDocumentRepository implements IDocumentRepository {
       );
 
       await client.query("COMMIT");
+
+      await this.syncExpiredStatus();
+
+      client
+        .query(
+          `SELECT associate_id FROM users 
+         WHERE is_active = true 
+           AND associate_id IS NOT NULL 
+           AND associate_id != $1 
+           AND id != $1`,
+          [responsableId],
+        )
+        .then((res) => {
+          for (const row of res.rows) {
+            this.sendEmailForNotification(
+              row.associate_id,
+              "Nuevo Documento Publicado",
+              "Se ha publicado una nueva versión oficial de un documento. ¡Por favor revísalo!",
+              "PUBLICADO",
+              docId,
+            ).catch((err) =>
+              console.error("Error al enviar email de publicación:", err),
+            );
+          }
+        })
+        .catch((err) =>
+          console.error(
+            "Error al obtener usuarios para email de publicación:",
+            err,
+          ),
+        );
     } catch (e) {
       await client.query("ROLLBACK");
       throw e;

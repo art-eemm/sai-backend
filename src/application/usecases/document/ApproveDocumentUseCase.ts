@@ -7,11 +7,13 @@ export class ApproveDocumentUseCase {
     docId: number,
     adminId: number,
     responsableId: number,
+    userRole: string,
   ): Promise<void> {
     return await this.documentRepo.approveDocument(
       docId,
       adminId,
       responsableId,
+      userRole,
     );
   }
 }

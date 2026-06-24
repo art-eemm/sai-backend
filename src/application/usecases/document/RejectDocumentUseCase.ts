@@ -8,6 +8,7 @@ export class RejectDocumentUseCase {
     adminId: number,
     responsableId: number,
     comments: string,
+    correctionFilePath?: string,
   ): Promise<void> {
     if (!comments || comments.trim().length === 0) {
       throw new Error("Los comentarios de rechazo son obligatorios.");
@@ -18,6 +19,7 @@ export class RejectDocumentUseCase {
       adminId,
       responsableId,
       comments,
+      correctionFilePath,
     );
   }
 }

@@ -60,6 +60,8 @@ export class DocumentController {
         dto.expiration_years = String(req.body.expiration_years);
       if (req.body.expiration_months)
         dto.expiration_months = String(req.body.expiration_months);
+      if (req.body.document_date)
+        dto.document_date = String(req.body.document_date);
       const isAdmin = userRole.toUpperCase().includes("ADMIN");
       const result = await this.uploadDocumentUC.execute(dto, isAdmin);
       res.status(201).json(result);
@@ -163,6 +165,8 @@ export class DocumentController {
         versionDto.expiration_years = String(req.body.expiration_years);
       if (req.body.expiration_months)
         versionDto.expiration_months = String(req.body.expiration_months);
+      if (req.body.document_date)
+        versionDto.document_date = String(req.body.document_date);
       const result = await this.uploadVersionUC.execute(versionDto);
       if (!result) {
         res.status(404).json({ error: "Documento no encontrado" });
@@ -228,14 +232,16 @@ export class DocumentController {
   approve = async (req: Request, res: Response): Promise<void> => {
     try {
       const docId = this.paramId(req);
-      const adminId = (req as CustomRequest).user?.id;
+      const user = (req as CustomRequest).user;
+      const adminId = user?.id;
+      const userRole = user?.role || "";
       const doc = await this.getDocumentByIdUC.execute(docId);
       if (!doc) {
         res.status(404).json({ error: "Documento no encontrado" });
         return;
       }
 
-      await this.approveDocumentUC.execute(docId, adminId!, doc.created_by_id!);
+      await this.approveDocumentUC.execute(docId, adminId!, doc.created_by_id!, userRole);
       res.json({ message: "Documento aprobado para firma" });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -269,6 +275,7 @@ export class DocumentController {
         adminId!,
         doc.created_by_id!,
         comments,
+        req.file?.path,
       );
       res.json({ message: "Documento rechazado con observaciones" });
     } catch (error: any) {
@@ -293,6 +300,7 @@ export class DocumentController {
         fileSizeBytes: req.file.size,
         uploadedBy: uploadedBy!,
         rev: String(rev),
+        documentDate: req.body.document_date ? String(req.body.document_date) : undefined,
       });
 
       res.status(201).json(result);

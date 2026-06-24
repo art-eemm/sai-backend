@@ -36,7 +36,9 @@ export class UploadVersionUseCase {
 
     const years = parseInt(dto.expiration_years ?? "0") || 0;
     const months = parseInt(dto.expiration_months ?? "0") || 0;
-    const finalDate = calculateExpiration(new Date(), years, months);
+    const pdfDate = await this.pdfService.extractDate(dto.filePath);
+    const baseDateStr = (dto.document_date && dto.document_date.trim() !== "") ? dto.document_date : (pdfDate || new Date().toISOString());
+    const finalDate = calculateExpiration(baseDateStr, years, months);
 
     const fileSize = Math.round(dto.fileSizeBytes / 1024);
     const newFilePath = this.fileService.renameToCodeRev(
@@ -53,7 +55,7 @@ export class UploadVersionUseCase {
       file_type: fileType,
       size_kb: fileSize,
       uploaded_by_id: uploaderId,
-      revision_date: finalDate,
+      revision_date: baseDateStr,
     });
 
     let targetStatus = "EN_REVISION";
@@ -61,7 +63,7 @@ export class UploadVersionUseCase {
     if (isAdmin) {
       targetStatus = "VIGENTE";
       if (finalDate) {
-        const today = new Date().toISOString().split("T")[0];
+        const today = new Date().toISOString().slice(0, 10);
         if (finalDate < today) targetStatus = "VENCIDO";
       }
     } else if (doc.status === "CON_OBSERVACIONES") {

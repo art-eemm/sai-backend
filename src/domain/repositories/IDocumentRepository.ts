@@ -75,12 +75,14 @@ export interface IDocumentRepository {
     docId: number,
     adminId: number,
     responsableId: number,
+    userRole: string,
   ): Promise<void>;
   rejectDocument(
     docId: number,
     adminId: number,
     responsableId: number,
     comments: string,
+    correctionFilePath?: string,
   ): Promise<void>;
   createMassiveNotification?(
     document_id: number,

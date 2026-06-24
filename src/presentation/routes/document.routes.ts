@@ -83,8 +83,11 @@ router.post("/:id/send-to-review", validateToken, (req, res) =>
 router.post("/:id/approve", validateToken, (req, res) =>
   controller.approve(req, res),
 );
-router.post("/:id/reject", validateToken, (req, res) =>
-  controller.reject(req, res),
+router.post(
+  "/:id/reject",
+  validateToken,
+  upload.single("pdffile"),
+  (req, res) => controller.reject(req, res),
 );
 router.post(
   "/:id/publish-signed",

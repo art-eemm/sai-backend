@@ -21,6 +21,7 @@ export class PublishSignedVersionUseCase {
     fileSizeBytes: number;
     uploadedBy: number;
     rev: string;
+    documentDate?: string | undefined;
   }) {
     const document = await this.documentRepo.findById(data.documentId);
     if (!document) {
@@ -35,6 +36,17 @@ export class PublishSignedVersionUseCase {
 
     const ext = path.extname(finalPath).replace(".", "").toUpperCase();
 
+    const latestVersion = (document as any).versions?.[0];
+    const fallbackDate = latestVersion?.revision_date 
+      ? (latestVersion.revision_date instanceof Date 
+          ? latestVersion.revision_date.toISOString() 
+          : String(latestVersion.revision_date))
+      : new Date().toISOString();
+
+    const revisionDate = (data.documentDate && data.documentDate.trim() !== "") 
+      ? data.documentDate 
+      : fallbackDate;
+
     const versionData: CreateVersionData = {
       document_id: data.documentId,
       revision_number: data.rev,
@@ -42,7 +54,7 @@ export class PublishSignedVersionUseCase {
       file_type: ext,
       size_kb: Math.round(data.fileSizeBytes / 1024),
       uploaded_by_id: data.uploadedBy,
-      revision_date: new Date().toISOString(),
+      revision_date: revisionDate,
     };
 
     await this.documentRepo.createVersion(versionData);
@@ -50,23 +62,6 @@ export class PublishSignedVersionUseCase {
       data.documentId,
       data.uploadedBy,
     );
-
-    try {
-      const usersEmails = await this.userRepo.findAllEmails();
-
-      if (usersEmails.length > 0) {
-        const docName = document.title;
-        const docCategory = document.category;
-
-        this.mailerService
-          .sendNewDocumentAvailable(usersEmails, docName, docCategory)
-          .catch((err) =>
-            console.error("Error enviando correos masivos:", err),
-          );
-      }
-    } catch (error) {
-      console.error("Error al obtener correos para notificar:", error);
-    }
 
     return {
       success: true,

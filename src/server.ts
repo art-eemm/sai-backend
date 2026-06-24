@@ -1,6 +1,7 @@
 import app from "./app.js";
 import dotenv from "dotenv";
 import pool from "./config/db.js";
+import { startDocumentExpirationJob } from "./infrastructure/jobs/DocumentExpirationJob.js";
 
 dotenv.config();
 
@@ -14,6 +15,7 @@ const main = async () => {
 
     app.listen(PORT, () => {
       console.log(`Servidor del SAI corriendo en: http://localhost:${PORT}`);
+      startDocumentExpirationJob();
     });
   } catch (error) {
     console.error("Error al iniciar el servidor:", error);

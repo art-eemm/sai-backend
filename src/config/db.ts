@@ -26,6 +26,24 @@ pool.on("connect", () => {
   console.log("Conexión establecida");
 });
 
+// Auto-run schema migration
+pool.query(`
+  ALTER TABLE document_reviews 
+  ADD COLUMN IF NOT EXISTS correction_file_url VARCHAR(500);
+`).then(() => {
+  console.log("Tabla document_reviews verificada/actualizada con correction_file_url");
+}).catch((err) => {
+  console.error("Error al actualizar la tabla document_reviews:", err);
+});
+
+pool.query(`
+  ALTER TYPE document_status ADD VALUE IF NOT EXISTS 'APROBADO_SAI';
+`).then(() => {
+  console.log("Enum document_status verificado/actualizado con APROBADO_SAI");
+}).catch((err) => {
+  console.error("Error al actualizar el enum document_status:", err);
+});
+
 pool.on("error", (err) => {
   console.error("Error inesperado en el cliente de PostegreSQL", err);
   process.exit(-1);
