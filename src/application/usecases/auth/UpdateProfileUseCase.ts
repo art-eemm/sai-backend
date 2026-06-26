@@ -1,8 +1,12 @@
 import type { IUserRepository } from "@/domain/repositories/IUserRepository.js";
+import type { IMailService } from "@/domain/services/IMailService.js";
 import bcrypt from "bcryptjs";
 
 export class UpdateProfileUseCase {
-  constructor(private readonly userRepo: IUserRepository) {}
+  constructor(
+    private readonly userRepo: IUserRepository,
+    private readonly mailerService: IMailService,
+  ) {}
 
   async execute(
     userId: number,
@@ -34,6 +38,10 @@ export class UpdateProfileUseCase {
 
     if (Object.keys(updateData).length > 0) {
       await this.userRepo.updateProfile(userId, updateData);
+
+      if (updateData.password_hash) {
+        await this.mailerService.sendPasswordChangedConfirm(user.email);
+      }
     }
   }
 }

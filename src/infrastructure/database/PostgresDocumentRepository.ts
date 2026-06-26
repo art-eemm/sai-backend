@@ -589,14 +589,14 @@ export class PostgresDocumentRepository implements IDocumentRepository {
         await client.query(
           `
           INSERT INTO notifications (user_id, document_id, type, message)
-          SELECT COALESCE(associate_id, id), $1, 'APROBADO', 'El gerente ha aprobado el documento. Por favor sube la versión final firmada.'
+          SELECT COALESCE(associate_id, id), $1, 'APROBADO', Gerencia ha aprobado el documento. Por favor sube la versión final firmada.'
           FROM users
           WHERE role::text ILIKE '%ADMIN%' AND is_active = true
           `,
           [docId],
         );
         await client.query(
-          `INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'APROBADO', 'El gerente ha otorgado el Visto Bueno a tu documento. Un administrador subirá la versión final.')`,
+          `INSERT INTO notifications (user_id, document_id, type, message) VALUES ($1, $2, 'APROBADO', 'Gerencia ha otorgado el Visto Bueno a tu documento. Un administrador subirá la versión final.')`,
           [responsableId, docId],
         );
         await client.query("COMMIT");
@@ -649,7 +649,7 @@ export class PostgresDocumentRepository implements IDocumentRepository {
         await client.query(
           `
           INSERT INTO notifications (user_id, document_id, type, message)
-          SELECT COALESCE(associate_id, id), $1, 'NUEVA_REVISION', 'Un documento fue aprobado por el administrador y requiere tu visto bueno.'
+          SELECT COALESCE(associate_id, id), $1, 'NUEVA_REVISION', 'Un documento fue aprobado por el SAI y requiere tu revisión.'
           FROM users
           WHERE role::text ILIKE '%GERENTE%' AND is_active = true
           `,
@@ -671,7 +671,7 @@ export class PostgresDocumentRepository implements IDocumentRepository {
               this.sendEmailForNotification(
                 gerente.user_id,
                 "Revisión Requerida",
-                "Un documento fue aprobado por el administrador y requiere tu revisión.",
+                "Un documento fue aprobado por el SAI y requiere tu revisión.",
                 "NUEVA_REVISION",
                 docId,
               ).catch((err) =>

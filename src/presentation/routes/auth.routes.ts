@@ -19,9 +19,9 @@ const controller = new AuthController(
   new LoginUseCase(userRepo),
   new GetProfileUseCase(userRepo),
   new SendResetCodeUseCase(userRepo, mailerService),
-  new ResetPasswordUseCase(userRepo),
+  new ResetPasswordUseCase(userRepo, mailerService),
   new VerifyResetCodeUseCase(userRepo),
-  new UpdateProfileUseCase(userRepo),
+  new UpdateProfileUseCase(userRepo, mailerService),
 );
 
 // ── Routes ────────────────────────────────────────────────────────────────────

@@ -1,8 +1,12 @@
 import type { IUserRepository } from "@/domain/repositories/IUserRepository.js";
+import type { IMailService } from "@/domain/services/IMailService.js";
 import bcrypt from "bcryptjs";
 
 export class ResetPasswordUseCase {
-  constructor(private readonly userRepo: IUserRepository) {}
+  constructor(
+    private readonly userRepo: IUserRepository,
+    private readonly mailerService: IMailService,
+  ) {}
 
   async execute(
     email: string,
@@ -24,5 +28,7 @@ export class ResetPasswordUseCase {
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
     await this.userRepo.updatePasswordAndClearCode(email, hashedPassword);
+
+    await this.mailerService.sendPasswordChangedConfirm(email);
   }
 }

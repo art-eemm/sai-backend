@@ -14,4 +14,5 @@ export interface IMailService {
   sendResetCode(to: string, code: string): Promise<void>;
   sendMail(to: string, subject: string, html: string): Promise<void>;
   sendSystemNotification(options: SystemNotificationEmailOptions): Promise<void>;
+  sendPasswordChangedConfirm(to: string): Promise<void>;
 }
